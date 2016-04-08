@@ -31,6 +31,23 @@ $ docker run -v /var/run/docker.sock:/var/run/docker.sock:ro  --rm -ti \
      camptocamp/conplicity
 ```
 
+### Using the jobber-based image
+
+A docker image based on [blacklabelops/jobber](https://hub.docker.com/r/blacklabelops/jobber/)
+is provided to ease recurrent backups:
+
+```shell
+$ docker run -v /var/run/docker.sock:/var/run/docker.sock:ro  --rm -ti \
+   -e DUPLICITY_TARGET_URL=s3://s3-eu-west-1.amazonaws.com/<my_bucket>/<my_dir> \
+   -e AWS_ACCESS_KEY_ID=<my_key_id> \
+   -e AWS_SECRET_ACCESS_KEY=<my_secret_key> \
+   -e JOB_NAME1=conplicity \
+   -e JOB_COMMAND1=/usr/bin/conplicity \
+   -e JOB_TIME1="0 0 3" \
+     camptocamp/conplicity:jobber
+```
+
+
 ## Environment variables
 
 ### DUPLICITY_DOCKER_IMAGE
