@@ -5,20 +5,24 @@ import (
 	"unicode/utf8"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/caarlos0/env"
 	"github.com/fgrehm/go-dockerpty"
 	"github.com/fsouza/go-dockerclient"
 )
 
+const labelPrefix string = "io.conplicity"
+
 type environment struct {
-	Image              string
-	DuplicityTargetURL string
-	AWSAccessKeyID     string
-	AWSSecretAccessKey string
-	SwiftUsername      string
-	SwiftPassword      string
-	SwiftAuthURL       string
-	SwiftTenantName    string
-	SwiftRegionName    string
+	Image              string `env:"DUPLICITY_DOCKER_IMAGE" envDefault:"camptocamp/duplicity:latest"`
+	DuplicityTargetURL string `env:"DUPLICITY_TARGET_URL"`
+	AWSAccessKeyID     string `env:"AWS_ACCESS_KEY_ID"`
+	AWSSecretAccessKey string `env:"AWS_SECRET_ACCESS_KEY"`
+	SwiftUsername      string `env:"SWIFT_USERNAME"`
+	SwiftPassword      string `env:"SWIFT_PASSWORD"`
+	SwiftAuthURL       string `env:"SWIFT_AUTHURL"`
+	SwiftTenantName    string `env:"SWIFT_TENANTNAME"`
+	SwiftRegionName    string `env:"SWIFT_REGIONNAME"`
+	FullIfOlderThan    string `env:"FULL_IF_OLDER_THAN" envDefault:"15D"`
 }
 
 type conplicity struct {
@@ -51,7 +55,9 @@ func main() {
 	checkErr(err, "Failed to pull image: %v", 1)
 
 	for _, vol := range vols {
-		err = c.backupVolume(vol)
+		voll, _ := c.InspectVolume(vol.Name)
+		checkErr(err, "Failed to inspect volume "+vol.Name+": %v", -1)
+		err = c.backupVolume(voll)
 		checkErr(err, "Failed to process volume "+vol.Name+": %v", -1)
 	}
 
@@ -59,28 +65,20 @@ func main() {
 }
 
 func (c *conplicity) getEnv() (err error) {
-	c.environment = &environment{
-		Image:              os.Getenv("DUPLICITY_DOCKER_IMAGE"),
-		DuplicityTargetURL: os.Getenv("DUPLICITY_TARGET_URL"),
-		AWSAccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
-		AWSSecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
-		SwiftUsername:      os.Getenv("SWIFT_USERNAME"),
-		SwiftPassword:      os.Getenv("SWIFT_PASSWORD"),
-		SwiftAuthURL:       os.Getenv("SWIFT_AUTHURL"),
-		SwiftTenantName:    os.Getenv("SWIFT_TENANTNAME"),
-		SwiftRegionName:    os.Getenv("SWIFT_REGIONNAME"),
-	}
-
-	if c.Image == "" {
-		c.Image = "camptocamp/duplicity:latest"
-	}
+	c.environment = &environment{}
+	env.Parse(c.environment)
 
 	return
 }
 
-func (c *conplicity) backupVolume(vol docker.Volume) (err error) {
+func (c *conplicity) backupVolume(vol *docker.Volume) (err error) {
 	if utf8.RuneCountInString(vol.Name) == 64 {
-		log.Infof("Ignoring volume " + vol.Name)
+		log.Infof("Ignoring unnamed volume " + vol.Name)
+		return
+	}
+
+	if getVolumeLabel(vol, ".ignore") == "true" {
+		log.Infof("Ignoring blacklisted volume " + vol.Name)
 		return
 	}
 
@@ -89,11 +87,17 @@ func (c *conplicity) backupVolume(vol docker.Volume) (err error) {
 	log.Infof("Driver: " + vol.Driver)
 	log.Infof("Mountpoint: " + vol.Mountpoint)
 	log.Infof("Creating duplicity container...")
+
+	fullIfOlderThan := getVolumeLabel(vol, ".full_if_older_than")
+	if fullIfOlderThan == "" {
+		fullIfOlderThan = c.FullIfOlderThan
+	}
+
 	container, err := c.CreateContainer(
 		docker.CreateContainerOptions{
 			Config: &docker.Config{
 				Cmd: []string{
-					"--full-if-older-than", "15D",
+					"--full-if-older-than", fullIfOlderThan,
 					"--s3-use-new-style",
 					"--no-encryption",
 					"--allow-source-mismatch",
@@ -142,15 +146,20 @@ func (c *conplicity) backupVolume(vol docker.Volume) (err error) {
 }
 
 func (c *conplicity) pullImage() (err error) {
-  if _, err = c.InspectImage(c.Image); err != nil {
-    // TODO: output pull to logs
-    log.Infof("Pulling image %v", c.Image)
-    err = c.PullImage(docker.PullImageOptions{
-      Repository: c.Image,
-    }, docker.AuthConfiguration{})
-  }
+	if _, err = c.InspectImage(c.Image); err != nil {
+		// TODO: output pull to logs
+		log.Infof("Pulling image %v", c.Image)
+		err = c.PullImage(docker.PullImageOptions{
+			Repository: c.Image,
+		}, docker.AuthConfiguration{})
+	}
 
 	return err
+}
+
+func getVolumeLabel(vol *docker.Volume, key string) (value string) {
+	value = vol.Labels[labelPrefix+key]
+	return
 }
 
 func checkErr(err error, msg string, exit int) {
