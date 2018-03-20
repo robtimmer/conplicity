@@ -95,7 +95,7 @@ func (r *ResticEngine) init() (err error) {
 			v.Mount,
 		},
 	)
-	if strings.Contains(stdout, "already initialized") {
+	if strings.Contains(stdout, "already initialized") || strings.Contains(stdout, "config already exists") {
 		err = nil
 		return
 	}
@@ -259,6 +259,8 @@ func (r *ResticEngine) launchRestic(cmd, binds []string) (state int, stdout stri
 		"OS_TENANT_NAME=" + config.Swift.TenantName,
 		"OS_REGION_NAME=" + config.Swift.RegionName,
 		"RESTIC_PASSWORD=" + config.Restic.Password,
+		"B2_ACCOUNT_ID=" + config.B2.AccountID,
+		"B2_ACCOUNT_KEY=" + config.B2.ApplicationKey,
 	}
 
 	return r.Orchestrator.LaunchContainer(image, env, cmd, binds)

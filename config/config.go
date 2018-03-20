@@ -55,6 +55,11 @@ type Config struct {
 		RegionName string `long:"swift-region-name" description:"The Swift region name." env:"SWIFT_REGIONNAME"`
 	} `group:"Swift Options"`
 
+	B2 struct {
+		AccountID string `long:"b2-account-id" description:"The Backblaze B2 account id." env:"B2_ACCOUNT_ID"`
+		ApplicationKey string `long:"b2-application-key" description:"The Backblaze B2 application key." env:"B2_APPLICATION_KEY"`
+	} `group:"B2 Options"`
+
 	Docker struct {
 		Endpoint string `short:"e" long:"docker-endpoint" description:"The Docker endpoint." env:"DOCKER_ENDPOINT" default:"unix:///var/run/docker.sock"`
 	} `group:"Docker Options"`
